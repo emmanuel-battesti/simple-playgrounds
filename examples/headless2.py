@@ -1,7 +1,5 @@
-# pylint: disable=import-outside-toplevel
-
 import time
-from multiprocessing import Pool
+from multiprocessing import Process, Manager
 
 
 def run_environment(headless):
@@ -48,18 +46,33 @@ def run_environment(headless):
         playground.step(commands=agent_command)
 
     elapsed_time = time.time() - start_time  # Calcule le temps écoulé
+    print(f"Elapsed time for {headless}: {elapsed_time:.2f} seconds")
     return elapsed_time
 
+
+def worker(headless, time_completions, index):
+    try:
+        time_completions[index] = run_environment(headless)
+    except Exception as e:
+        print(f"Error in process {index}: {e}")
+        time_completions[index] = 0.0  # Default value in case of failure
 
 if __name__ == "__main__":
     hl = [True, False, True, False, True, True, False, False, True, True]
 
-    t = time.time()
-    with Pool(4) as p:
-        time_completion = p.map(run_environment, hl)
+    with Manager() as manager:
+        time_completions = manager.list([0] * len(hl))
+        processes = []
 
-    # Formater chaque élément de la liste avec 3 décimales et afficher
-    formatted_time_completion = [f"{time:.3f}" for time in time_completion]
-    print(f"time_completion: {formatted_time_completion}")
+        for i, headless in enumerate(hl):
+            p = Process(target=worker, args=(headless, time_completions, i))
+            processes.append(p)
+            p.start()
 
-    print(f"Computing {len(hl)} environments of 1000 ts in {sum(time_completion):.3f} sec")
+        for p in processes:
+            p.join()
+
+        for i, time_completion in enumerate(time_completions):
+            print(f"Result for process {i}: {time_completion}")
+
+        print(f"Computing {len(hl)} environments of 1000 ts in {sum(time_completions):.3f} sec")
